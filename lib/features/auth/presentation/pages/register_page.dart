@@ -133,6 +133,13 @@ class _RegisterPageState extends State<RegisterPage> {
                         ],
                       ),
                     ),
+                    const SizedBox(height: 16),
+                    Center(
+                      child: TextButton(
+                        onPressed: () => Navigator.of(context).pushNamed('/login'),
+                        child: const Text('Already have an account? Sign in'),
+                      ),
+                    ),
                   ],
                 ),
               ),
