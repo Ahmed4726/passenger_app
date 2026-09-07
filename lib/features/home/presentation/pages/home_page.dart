@@ -24,7 +24,15 @@ class HomePage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Transport Ease'),
         actions: [
-          IconButton(onPressed: () => _logout(context), icon: const Icon(Icons.logout)),
+          IconButton(
+            tooltip: 'My bookings',
+            onPressed: () => Navigator.pushNamed(context, '/my-bookings'),
+            icon: const Icon(Icons.confirmation_number_outlined),
+          ),
+          IconButton(
+            onPressed: () => _logout(context),
+            icon: const Icon(Icons.logout),
+          ),
         ],
       ),
       body: SafeArea(
@@ -63,9 +71,17 @@ class _HomeHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Ready to ride?', style: AppTextStyles.heading.copyWith(color: AppColors.white)),
+          Text(
+            'Ready to ride?',
+            style: AppTextStyles.heading.copyWith(color: AppColors.white),
+          ),
           const SizedBox(height: 10),
-          Text('Search live trips, pick your stop, and book a ride in seconds.', style: AppTextStyles.body.copyWith(color: AppColors.white.withOpacity(0.9))),
+          Text(
+            'Search live trips, pick your stop, and book a ride in seconds.',
+            style: AppTextStyles.body.copyWith(
+              color: AppColors.white.withOpacity(0.9),
+            ),
+          ),
           const SizedBox(height: 20),
           Row(
             children: const [
@@ -93,7 +109,10 @@ class _InfoChip extends StatelessWidget {
         color: AppColors.white.withOpacity(0.12),
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Text(text, style: AppTextStyles.body.copyWith(color: AppColors.white)),
+      child: Text(
+        text,
+        style: AppTextStyles.body.copyWith(color: AppColors.white),
+      ),
     );
   }
 }

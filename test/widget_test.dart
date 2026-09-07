@@ -8,23 +8,55 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:passenger_app/main.dart';
+import 'package:passenger_app/features/bookings/data/booking.dart';
+import 'package:passenger_app/features/bookings/presentation/pages/booking_flow_pages.dart';
+import 'package:passenger_app/features/trips/data/trip.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  final trip = Trip.fromJson({
+    'id': 12,
+    'status': 'scheduled',
+    'driver_name': 'Driver',
+    'vehicle_name': 'Van',
+    'available_seats': 2,
+    'total_capacity': 4,
+    'from_stop': {'display_name': 'Stop A'},
+    'to_stop': {'display_name': 'Stop B'},
+  });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+  testWidgets('seat selector starts at one and respects availability', (
+    tester,
+  ) async {
+    await tester.pumpWidget(MaterialApp(home: TripDetailsPage(trip: trip)));
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
     expect(find.text('1'), findsOneWidget);
+    await tester.tap(find.byTooltip('Add a seat'));
+    await tester.pump();
+    expect(find.text('2'), findsOneWidget);
+    await tester.tap(find.byTooltip('Add a seat'));
+    await tester.pump();
+    expect(find.text('2'), findsOneWidget);
+  });
+
+  test('booking parses null fare fields without failing', () {
+    final booking = Booking.fromJson({
+      'id': 1,
+      'booking_reference': 'TE-TEST',
+      'seats': 1,
+      'status': 'confirmed',
+      'fare_per_seat': null,
+      'total_fare': null,
+      'trip': <String, dynamic>{
+        'id': 12,
+        'status': 'scheduled',
+        'driver_name': 'Driver',
+        'vehicle_name': 'Van',
+        'available_seats': 2,
+        'total_capacity': 4,
+      },
+    });
+
+    expect(booking.farePerSeat, isNull);
+    expect(booking.totalFare, isNull);
   });
 }

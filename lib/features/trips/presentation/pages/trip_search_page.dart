@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/api/dio_client.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../data/trip.dart';
 
 class TripSearchPage extends StatefulWidget {
   const TripSearchPage({super.key});
@@ -58,7 +59,9 @@ class _TripSearchPageState extends State<TripSearchPage> {
         _cities = _extractListFromResponse(citiesResponse.data);
       });
     } on DioException catch (e) {
-      final message = e.response?.data['message'] ?? 'Unable to load city data. Please refresh.';
+      final message =
+          e.response?.data['message'] ??
+          'Unable to load city data. Please refresh.';
       setState(() {
         _loadError = message.toString();
       });
@@ -71,7 +74,10 @@ class _TripSearchPageState extends State<TripSearchPage> {
     }
   }
 
-  Future<void> _loadStopsForCity({required bool isFrom, required int cityId}) async {
+  Future<void> _loadStopsForCity({
+    required bool isFrom,
+    required int cityId,
+  }) async {
     setState(() {
       if (isFrom) {
         _loadingFromStops = true;
@@ -106,7 +112,9 @@ class _TripSearchPageState extends State<TripSearchPage> {
           _toCityId = cityId;
         }
       });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unable to load stops for that city.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to load stops for that city.')),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -135,7 +143,11 @@ class _TripSearchPageState extends State<TripSearchPage> {
 
   Future<void> _searchTrips() async {
     if (_fromStopId == null || _toStopId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please choose both your origin and destination.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please choose both your origin and destination.'),
+        ),
+      );
       return;
     }
 
@@ -144,10 +156,10 @@ class _TripSearchPageState extends State<TripSearchPage> {
       _trips = [];
     });
     try {
-      final response = await DioClient.dio.get('/passenger-trips', queryParameters: {
-        'from_stop_id': _fromStopId,
-        'to_stop_id': _toStopId,
-      });
+      final response = await DioClient.dio.get(
+        '/passenger-trips',
+        queryParameters: {'from_stop_id': _fromStopId, 'to_stop_id': _toStopId},
+      );
       setState(() => _trips = response.data['data'] ?? []);
     } catch (_) {
       setState(() => _trips = []);
@@ -178,25 +190,264 @@ class _TripSearchPageState extends State<TripSearchPage> {
                   color: AppColors.danger.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Text(_loadError!, style: AppTextStyles.body.copyWith(color: AppColors.danger, fontWeight: FontWeight.w600)),
+                child: Text(
+                  _loadError!,
+                  style: AppTextStyles.body.copyWith(
+                    color: AppColors.danger,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ),
           Expanded(
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
               children: [
-                      Container(
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(28),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.04),
+                        blurRadius: 24,
+                        offset: const Offset(0, 12),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            height: 44,
+                            width: 44,
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: const Icon(
+                              Icons.route_outlined,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Plan your route',
+                                  style: AppTextStyles.title,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Search available trips between your stops',
+                                  style: AppTextStyles.body.copyWith(
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      _buildSection(
+                        title: 'From',
+                        isFromCity: true,
+                        cityValue: _fromCityId,
+                        cityName: _fromCityName,
+                        stopValue: _fromStopId,
+                        stops: _fromStops,
+                        loadingStops: _loadingFromStops,
+                        onStopChanged: (stopId) =>
+                            setState(() => _fromStopId = stopId),
+                        cities: _cities,
+                      ),
+                      const SizedBox(height: 18),
+                      _buildSection(
+                        title: 'To',
+                        isFromCity: false,
+                        cityValue: _toCityId,
+                        cityName: _toCityName,
+                        stopValue: _toStopId,
+                        stops: _toStops,
+                        loadingStops: _loadingToStops,
+                        onStopChanged: (stopId) =>
+                            setState(() => _toStopId = stopId),
+                        cities: _cities,
+                      ),
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: canSearch && !_searching
+                              ? _searchTrips
+                              : null,
+                          icon: _searching
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(Icons.search),
+                          label: Text(
+                            _searching ? 'Searching...' : 'Search rides',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (_trips.isEmpty)
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.directions_bus_outlined,
+                          size: 42,
+                          color: AppColors.primary,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          canSearch
+                              ? 'No trips found yet'
+                              : 'Choose your route',
+                          style: AppTextStyles.title,
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          canSearch
+                              ? 'We couldn’t find any active drivers for this route yet.'
+                              : 'Select departure and destination to see live trip options.',
+                          style: AppTextStyles.body.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  ..._trips.map((trip) {
+                    final currentLocation = trip['current_location'];
+                    final nextStop = trip['next_stop'];
+                    final driverLocation = trip['driver_location'];
+                    final distanceKm = trip['distance_to_passenger_stop_km'];
+                    final etaMinutes = trip['eta_to_passenger_stop_minutes'];
+                    final driverSpeed = trip['driver_speed_kmh'];
+                    final seatsBooked = trip['seats_booked'];
+                    final seatsLeft = trip['available_seats'];
+                    final totalCapacity = trip['total_capacity'];
+                    return InkWell(
+                      onTap: () {
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.vertical(
+                              top: Radius.circular(24),
+                            ),
+                          ),
+                          builder: (_) {
+                            final driverCoords = driverLocation != null
+                                ? '${(driverLocation['latitude'] as num?)?.toStringAsFixed(5) ?? '0.00000'}, ${(driverLocation['longitude'] as num?)?.toStringAsFixed(5) ?? '0.00000'}'
+                                : 'Not available';
+                            return SafeArea(
+                              child: Padding(
+                                padding: const EdgeInsets.all(20),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '${trip['driver_name']} live tracking',
+                                      style: AppTextStyles.title,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      'Driver location: $driverCoords',
+                                      style: AppTextStyles.body,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Distance to your stop: ${distanceKm ?? 'N/A'} km',
+                                      style: AppTextStyles.body,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'ETA to you: ${etaMinutes ?? 'N/A'} min',
+                                      style: AppTextStyles.body,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Speed: ${driverSpeed ?? 'N/A'} km/h',
+                                      style: AppTextStyles.body,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Passengers in ride: $seatsBooked / $totalCapacity',
+                                      style: AppTextStyles.body,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Seats left: $seatsLeft / $totalCapacity',
+                                      style: AppTextStyles.body,
+                                    ),
+                                    const SizedBox(height: 20),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: FilledButton(
+                                        onPressed: () {
+                                          Navigator.pop(context);
+                                          Navigator.pushNamed(
+                                            context,
+                                            '/trip-details',
+                                            arguments: Trip.fromJson(
+                                              Map<String, dynamic>.from(trip),
+                                            ),
+                                          );
+                                        },
+                                        child: const Text('View trip details'),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                      child: Container(
                         width: double.infinity,
                         margin: const EdgeInsets.symmetric(vertical: 8),
-                        padding: const EdgeInsets.all(20),
+                        padding: const EdgeInsets.all(18),
                         decoration: BoxDecoration(
                           color: AppColors.surface,
-                          borderRadius: BorderRadius.circular(28),
+                          borderRadius: BorderRadius.circular(22),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.04),
-                              blurRadius: 24,
-                              offset: const Offset(0, 12),
+                              color: Colors.black.withOpacity(0.03),
+                              blurRadius: 18,
+                              offset: const Offset(0, 8),
                             ),
                           ],
                         ),
@@ -204,230 +455,135 @@ class _TripSearchPageState extends State<TripSearchPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Container(
-                                  height: 44,
-                                  width: 44,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primary.withOpacity(0.12),
-                                    borderRadius: BorderRadius.circular(16),
+                                CircleAvatar(
+                                  radius: 22,
+                                  backgroundColor: AppColors.primary
+                                      .withOpacity(0.16),
+                                  child: const Icon(
+                                    Icons.person,
+                                    color: AppColors.primary,
                                   ),
-                                  child: const Icon(Icons.route_outlined, color: AppColors.primary),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      Text('Plan your route', style: AppTextStyles.title),
-                                      const SizedBox(height: 4),
-                                      Text('Search available trips between your stops', style: AppTextStyles.body.copyWith(color: AppColors.textSecondary)),
+                                      Text(
+                                        '${trip['driver_name']} • ${trip['vehicle_name']}',
+                                        style: AppTextStyles.title,
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        '${trip['from_stop']?['city_name'] ?? trip['from_stop']?['display_name'] ?? ''} → ${trip['to_stop']?['city_name'] ?? trip['to_stop']?['display_name'] ?? ''}',
+                                        style: AppTextStyles.body.copyWith(
+                                          color: AppColors.textSecondary,
+                                        ),
+                                      ),
                                     ],
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: Text(
+                                    'Live',
+                                    style: AppTextStyles.body.copyWith(
+                                      color: AppColors.primary,
+                                      fontWeight: FontWeight.w700,
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 24),
-                            _buildSection(
-                              title: 'From',
-                              isFromCity: true,
-                              cityValue: _fromCityId,
-                              cityName: _fromCityName,
-                              stopValue: _fromStopId,
-                              stops: _fromStops,
-                              loadingStops: _loadingFromStops,
-                              onStopChanged: (stopId) => setState(() => _fromStopId = stopId),
-                              cities: _cities,
+                            const SizedBox(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                _TripInfoChip(
+                                  label: 'Next',
+                                  value: nextStop?['display_name'] ?? 'Waiting',
+                                ),
+                                _TripInfoChip(
+                                  label: 'ETA',
+                                  value: '${trip['eta_to_next_stop']} min',
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 18),
-                            _buildSection(
-                              title: 'To',
-                              isFromCity: false,
-                              cityValue: _toCityId,
-                              cityName: _toCityName,
-                              stopValue: _toStopId,
-                              stops: _toStops,
-                              loadingStops: _loadingToStops,
-                              onStopChanged: (stopId) => setState(() => _toStopId = stopId),
-                              cities: _cities,
+                            const SizedBox(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                _TripInfoChip(
+                                  label: 'Distance',
+                                  value: distanceKm != null
+                                      ? '${distanceKm} km'
+                                      : 'N/A',
+                                ),
+                                _TripInfoChip(
+                                  label: 'Speed',
+                                  value: driverSpeed != null
+                                      ? '${driverSpeed} km/h'
+                                      : 'N/A',
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 24),
-                            SizedBox(
-                              width: double.infinity,
-                              child: FilledButton.icon(
-                                onPressed: canSearch && !_searching ? _searchTrips : null,
-                                icon: _searching ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.search),
-                                label: Text(_searching ? 'Searching...' : 'Search rides'),
+                            const SizedBox(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                _TripInfoChip(
+                                  label: 'Passengers',
+                                  value: '$seatsBooked / $totalCapacity',
+                                ),
+                                _TripInfoChip(
+                                  label: 'Seats left',
+                                  value: '$seatsLeft',
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Current',
+                              style: AppTextStyles.subtitle.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              currentLocation?['display_name'] ??
+                                  'Starting soon',
+                              style: AppTextStyles.body,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              driverLocation != null
+                                  ? 'Driver is ${distanceKm ?? 'N/A'} km away • ETA ${etaMinutes ?? 'N/A'} min'
+                                  : 'Driver location not available yet',
+                              style: AppTextStyles.body.copyWith(
+                                color: AppColors.textSecondary,
                               ),
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      if (_trips.isEmpty)
-                        Container(
-                          width: double.infinity,
-                          margin: const EdgeInsets.symmetric(vertical: 4),
-                          padding: const EdgeInsets.all(24),
-                          decoration: BoxDecoration(
-                            color: AppColors.surface,
-                            borderRadius: BorderRadius.circular(24),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              const Icon(Icons.directions_bus_outlined, size: 42, color: AppColors.primary),
-                              const SizedBox(height: 16),
-                              Text(canSearch ? 'No trips found yet' : 'Choose your route', style: AppTextStyles.title, textAlign: TextAlign.center),
-                              const SizedBox(height: 10),
-                              Text(canSearch ? 'We couldn’t find any active drivers for this route yet.' : 'Select departure and destination to see live trip options.', style: AppTextStyles.body.copyWith(color: AppColors.textSecondary), textAlign: TextAlign.center),
-                            ],
-                          ),
-                        )
-                      else
-                        ..._trips.map((trip) {
-                          final currentLocation = trip['current_location'];
-                          final nextStop = trip['next_stop'];
-                          final driverLocation = trip['driver_location'];
-                          final distanceKm = trip['distance_to_passenger_stop_km'];
-                          final etaMinutes = trip['eta_to_passenger_stop_minutes'];
-                          final driverSpeed = trip['driver_speed_kmh'];
-                          final seatsBooked = trip['seats_booked'];
-                          final seatsLeft = trip['available_seats'];
-                          final totalCapacity = trip['total_capacity'];
-                          return InkWell(
-                            onTap: () {
-                              showModalBottomSheet(
-                                context: context,
-                                isScrollControlled: true,
-                                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-                                builder: (_) {
-                                  final driverCoords = driverLocation != null
-                                      ? '${(driverLocation['latitude'] as num?)?.toStringAsFixed(5) ?? '0.00000'}, ${(driverLocation['longitude'] as num?)?.toStringAsFixed(5) ?? '0.00000'}'
-                                      : 'Not available';
-                                  return SafeArea(
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(20),
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text('${trip['driver_name']} live tracking', style: AppTextStyles.title),
-                                          const SizedBox(height: 12),
-                                          Text('Driver location: $driverCoords', style: AppTextStyles.body),
-                                          const SizedBox(height: 8),
-                                          Text('Distance to your stop: ${distanceKm ?? 'N/A'} km', style: AppTextStyles.body),
-                                          const SizedBox(height: 8),
-                                          Text('ETA to you: ${etaMinutes ?? 'N/A'} min', style: AppTextStyles.body),
-                                          const SizedBox(height: 8),
-                                          Text('Speed: ${driverSpeed ?? 'N/A'} km/h', style: AppTextStyles.body),
-                                          const SizedBox(height: 8),
-                                          Text('Passengers in ride: $seatsBooked / $totalCapacity', style: AppTextStyles.body),
-                                          const SizedBox(height: 8),
-                                          Text('Seats left: $seatsLeft / $totalCapacity', style: AppTextStyles.body),
-                                          const SizedBox(height: 20),
-                                          SizedBox(
-                                            width: double.infinity,
-                                            child: FilledButton(
-                                              onPressed: () => Navigator.pop(context),
-                                              child: const Text('Close'),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
-                              );
-                            },
-                            child: Container(
-                              width: double.infinity,
-                              margin: const EdgeInsets.symmetric(vertical: 8),
-                              padding: const EdgeInsets.all(18),
-                              decoration: BoxDecoration(
-                                color: AppColors.surface,
-                                borderRadius: BorderRadius.circular(22),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.03),
-                                    blurRadius: 18,
-                                    offset: const Offset(0, 8),
-                                  ),
-                                ],
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      CircleAvatar(
-                                        radius: 22,
-                                        backgroundColor: AppColors.primary.withOpacity(0.16),
-                                        child: const Icon(Icons.person, color: AppColors.primary),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text('${trip['driver_name']} • ${trip['vehicle_name']}', style: AppTextStyles.title),
-                                            const SizedBox(height: 6),
-                                            Text('${trip['from_city_name'] ?? ''} → ${trip['to_city_name'] ?? ''}', style: AppTextStyles.body.copyWith(color: AppColors.textSecondary)),
-                                          ],
-                                        ),
-                                      ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.primary.withOpacity(0.12),
-                                          borderRadius: BorderRadius.circular(16),
-                                        ),
-                                        child: Text('Live', style: AppTextStyles.body.copyWith(color: AppColors.primary, fontWeight: FontWeight.w700)),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      _TripInfoChip(label: 'Next', value: nextStop?['display_name'] ?? 'Waiting'),
-                                      _TripInfoChip(label: 'ETA', value: '${trip['eta_to_next_stop']} min'),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      _TripInfoChip(label: 'Distance', value: distanceKm != null ? '${distanceKm} km' : 'N/A'),
-                                      _TripInfoChip(label: 'Speed', value: driverSpeed != null ? '${driverSpeed} km/h' : 'N/A'),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      _TripInfoChip(label: 'Passengers', value: '$seatsBooked / $totalCapacity'),
-                                      _TripInfoChip(label: 'Seats left', value: '$seatsLeft'),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text('Current', style: AppTextStyles.subtitle.copyWith(fontWeight: FontWeight.w600)),
-                                  const SizedBox(height: 6),
-                                  Text(currentLocation?['display_name'] ?? 'Starting soon', style: AppTextStyles.body),
-                                  const SizedBox(height: 6),
-                                  Text(driverLocation != null ? 'Driver is ${distanceKm ?? 'N/A'} km away • ETA ${etaMinutes ?? 'N/A'} min' : 'Driver location not available yet', style: AppTextStyles.body.copyWith(color: AppColors.textSecondary)),
-                                ],
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                    ],
-                  ),
-                ),
+                    );
+                  }).toList(),
               ],
             ),
-          );
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildSection({
@@ -443,12 +599,12 @@ class _TripSearchPageState extends State<TripSearchPage> {
   }) {
     final stopItems = stops.map<DropdownMenuItem<int?>>((stop) {
       final stopId = stop['id'];
-      final stopLabel = stop['display_name']?.toString() ?? stop['address']?.toString() ?? 'Stop';
+      final stopLabel =
+          stop['display_name']?.toString() ??
+          stop['address']?.toString() ??
+          'Stop';
       final parsedId = stopId is int ? stopId : int.tryParse(stopId.toString());
-      return DropdownMenuItem<int?>(
-        value: parsedId,
-        child: Text(stopLabel),
-      );
+      return DropdownMenuItem<int?>(value: parsedId, child: Text(stopLabel));
     }).toList();
 
     return Column(
@@ -508,47 +664,52 @@ class _TripSearchPageState extends State<TripSearchPage> {
         });
       },
       displayStringForOption: (city) => city['name']?.toString() ?? '',
-      fieldViewBuilder: (context, fieldTextEditingController, focusNode, onFieldSubmitted) {
-        final currentName = cityName ?? '';
-        if (fieldTextEditingController.text != currentName) {
-          fieldTextEditingController.text = currentName;
-          fieldTextEditingController.selection = TextSelection.collapsed(offset: currentName.length);
-        }
+      fieldViewBuilder:
+          (context, fieldTextEditingController, focusNode, onFieldSubmitted) {
+            final currentName = cityName ?? '';
+            if (fieldTextEditingController.text != currentName) {
+              fieldTextEditingController.text = currentName;
+              fieldTextEditingController.selection = TextSelection.collapsed(
+                offset: currentName.length,
+              );
+            }
 
-        return TextFormField(
-          controller: fieldTextEditingController,
-          focusNode: focusNode,
-          decoration: InputDecoration(
-            labelText: 'City',
-            border: const OutlineInputBorder(),
-            prefixIcon: const Icon(Icons.location_city),
-            suffixIcon: fieldTextEditingController.text.isNotEmpty
-                ? IconButton(
-                    icon: const Icon(Icons.clear),
-                    onPressed: () {
-                      fieldTextEditingController.clear();
-                      setState(() {
-                        if (isFrom) {
-                          _fromCityId = null;
-                          _fromCityName = null;
-                          _fromStops = [];
-                          _fromStopId = null;
-                        } else {
-                          _toCityId = null;
-                          _toCityName = null;
-                          _toStops = [];
-                          _toStopId = null;
-                        }
-                      });
-                    },
-                  )
-                : null,
-          ),
-          onFieldSubmitted: (_) => onFieldSubmitted(),
-        );
-      },
+            return TextFormField(
+              controller: fieldTextEditingController,
+              focusNode: focusNode,
+              decoration: InputDecoration(
+                labelText: 'City',
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.location_city),
+                suffixIcon: fieldTextEditingController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          fieldTextEditingController.clear();
+                          setState(() {
+                            if (isFrom) {
+                              _fromCityId = null;
+                              _fromCityName = null;
+                              _fromStops = [];
+                              _fromStopId = null;
+                            } else {
+                              _toCityId = null;
+                              _toCityName = null;
+                              _toStops = [];
+                              _toStopId = null;
+                            }
+                          });
+                        },
+                      )
+                    : null,
+              ),
+              onFieldSubmitted: (_) => onFieldSubmitted(),
+            );
+          },
       onSelected: (city) {
-        final cityId = city['id'] is int ? city['id'] as int : int.tryParse(city['id']?.toString() ?? '');
+        final cityId = city['id'] is int
+            ? city['id'] as int
+            : int.tryParse(city['id']?.toString() ?? '');
         if (cityId == null) return;
 
         setState(() {
@@ -584,9 +745,18 @@ class _TripInfoChip extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: AppTextStyles.subtitle.copyWith(fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+          Text(
+            label,
+            style: AppTextStyles.subtitle.copyWith(
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary,
+            ),
+          ),
           const SizedBox(height: 4),
-          Text(value, style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w700)),
+          Text(
+            value,
+            style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w700),
+          ),
         ],
       ),
     );

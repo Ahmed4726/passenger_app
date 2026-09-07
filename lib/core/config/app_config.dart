@@ -4,7 +4,7 @@ class AppConfig {
   AppConfig._();
 
   static String get baseUrl {
-    return 'http://api.booksdada.com/api';
+    return 'http://127.0.0.1:8000/api';
   }
 
   static const int timeout = 20000;
