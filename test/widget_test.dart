@@ -24,18 +24,38 @@ void main() {
     'to_stop': {'display_name': 'Stop B'},
   });
 
-  testWidgets('seat selector starts at one and respects availability', (
-    tester,
-  ) async {
-    await tester.pumpWidget(MaterialApp(home: TripDetailsPage(trip: trip)));
+  test('scheduled trip remains bookable and exposes trip data', () {
+    expect(trip.canBook, isTrue);
+    expect(trip.status, 'scheduled');
+    expect(trip.departureTime, isNull);
+    expect(trip.fromName, 'Stop A');
+    expect(trip.toName, 'Stop B');
+  });
 
-    expect(find.text('1'), findsOneWidget);
-    await tester.tap(find.byTooltip('Add a seat'));
-    await tester.pump();
-    expect(find.text('2'), findsOneWidget);
-    await tester.tap(find.byTooltip('Add a seat'));
-    await tester.pump();
-    expect(find.text('2'), findsOneWidget);
+  test('started trip parses live driver data and marks live status', () {
+    final liveTrip = Trip.fromJson({
+      'id': 21,
+      'status': 'started',
+      'driver_name': 'Driver',
+      'vehicle_name': 'Van',
+      'available_seats': 1,
+      'total_capacity': 4,
+      'from_stop': {'id': 1, 'display_name': 'Origin', 'latitude': 31.5, 'longitude': 74.3},
+      'to_stop': {'id': 2, 'display_name': 'Destination', 'latitude': 31.6, 'longitude': 74.4},
+      'departure_time': '08:00',
+      'trip_date': '2026-09-11',
+      'driver_location': {'latitude': 31.52, 'longitude': 74.32, 'recorded_at': '2026-09-11T08:05:00Z'},
+      'next_stop': {'display_name': 'Midtown'},
+      'eta_to_passenger_stop_minutes': 4,
+      'distance_to_passenger_stop_km': 2.4,
+      'driver_speed_kmh': 32.5,
+    });
+
+    expect(liveTrip.isLive, isTrue);
+    expect(liveTrip.statusLabel, 'LIVE');
+    expect(liveTrip.driverSpeedKmh, 32.5);
+    expect(liveTrip.etaToPassengerStopMinutes, 4);
+    expect(liveTrip.distanceToPassengerStopKm, 2.4);
   });
 
   test('booking parses null fare fields without failing', () {

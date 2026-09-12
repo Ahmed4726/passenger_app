@@ -1,6 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/api/api_exception.dart';
+import '../../../../core/api/dio_client.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../trips/data/trip.dart';
@@ -18,97 +23,456 @@ class TripDetailsPage extends StatefulWidget {
 
 class _TripDetailsPageState extends State<TripDetailsPage> {
   int _seats = 1;
+  bool _refreshing = false;
+  Timer? _pollTimer;
+  Trip _trip = const Trip(
+    id: 0,
+    status: 'scheduled',
+    driverName: 'Driver',
+    driverPhone: null,
+    vehicleName: 'Vehicle',
+    departureTime: null,
+    availableSeats: 0,
+    totalCapacity: 0,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _trip = widget.trip;
+    _startPolling();
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _startPolling() async {
+    _pollTimer?.cancel();
+    if (_trip.status != 'started') return;
+
+    await _refreshTripData();
+    _pollTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (!mounted) return;
+      _refreshTripData();
+    });
+  }
+
+  Future<void> _refreshTripData() async {
+    final trip = _trip;
+    final fromStopId = trip.fromStop?['id'];
+    final toStopId = trip.toStop?['id'];
+    if (fromStopId == null || toStopId == null) {
+      return;
+    }
+
+    setState(() => _refreshing = true);
+
+    try {
+      final response = await DioClient.dio.get(
+        '/passenger-trips',
+        queryParameters: {'from_stop_id': fromStopId, 'to_stop_id': toStopId},
+      );
+
+      final rawTrips = response.data is Map ? response.data['data'] : null;
+      if (rawTrips is! List) {
+        return;
+      }
+
+      final nextTrip = rawTrips.whereType<Map>().firstWhere(
+        (item) => (item['id'] as num?) == trip.id,
+        orElse: () => <String, dynamic>{},
+      );
+
+      if (nextTrip.isEmpty) {
+        return;
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _trip = Trip.fromJson(Map<String, dynamic>.from(nextTrip));
+        if (_trip.status != 'started') {
+          _pollTimer?.cancel();
+          _pollTimer = null;
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final trip = widget.trip;
+    final trip = _trip;
     final maxSeats = trip.availableSeats.clamp(0, 4);
-    final soldOut = !trip.canBook;
+    final showBooking = trip.canBook;
+    final showLiveNotice = trip.isLive && !trip.canBook;
+    final hasRouteCoordinates = _hasCoordinates(trip);
+    final hasDriverLocation = _hasDriverCoordinates(trip);
+    final mapTarget = hasDriverLocation
+        ? _driverCoordinate(trip)
+        : hasRouteCoordinates
+            ? _midpointCoordinate(trip)
+            : const LatLng(0, 0);
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Trip details')),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          Text(
-            '${trip.fromName} to ${trip.toName}',
-            style: AppTextStyles.heading,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '${trip.driverName} • ${trip.vehicleName}',
-            style: AppTextStyles.subtitle,
-          ),
-          const SizedBox(height: 24),
-          _DetailRow(
-            label: 'Departure',
-            value: trip.departureTime ?? 'Not provided',
-          ),
-          _DetailRow(
-            label: 'Trip date',
-            value: trip.tripDate ?? 'Not provided',
-          ),
-          _DetailRow(label: 'Status', value: trip.status),
-          _DetailRow(
-            label: 'Available seats',
-            value: '${trip.availableSeats} / ${trip.totalCapacity}',
-          ),
-          if (trip.etaToNextStop != null)
-            _DetailRow(
-              label: 'ETA to next stop',
-              value: '${trip.etaToNextStop} min',
+      appBar: AppBar(
+        title: const Text('Trip details'),
+        actions: [
+          if (trip.isLive)
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    trip.statusLabel,
+                    style: AppTextStyles.body.copyWith(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
             ),
-          const SizedBox(height: 28),
-          if (soldOut)
-            _Notice(
-              text: trip.availableSeats == 0
-                  ? 'This trip is sold out.'
-                  : 'This trip is no longer available for booking.',
-            ),
-          if (!soldOut) ...[
-            Text('Choose seats', style: AppTextStyles.title),
-            const SizedBox(height: 12),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: _refreshTripData,
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                IconButton(
-                  tooltip: 'Remove a seat',
-                  onPressed: _seats > 1 ? () => setState(() => _seats--) : null,
-                  icon: const Icon(Icons.remove_circle_outline),
+                Expanded(
+                  child: Text(
+                    '${trip.fromName} → ${trip.toName}',
+                    style: AppTextStyles.heading,
+                  ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Text('$_seats', style: AppTextStyles.heading),
-                ),
-                IconButton(
-                  tooltip: 'Add a seat',
-                  onPressed: _seats < maxSeats
-                      ? () => setState(() => _seats++)
-                      : null,
-                  icon: const Icon(Icons.add_circle_outline),
-                ),
+                if (_refreshing)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 12),
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
               ],
             ),
+            const SizedBox(height: 8),
             Text(
-              'Select 1 to $maxSeats seat${maxSeats == 1 ? '' : 's'}',
-              textAlign: TextAlign.center,
-              style: AppTextStyles.body.copyWith(
-                color: AppColors.textSecondary,
-              ),
+              '${trip.driverName} • ${trip.vehicleName}',
+              style: AppTextStyles.subtitle,
             ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: () => Navigator.pushNamed(
-                  context,
-                  '/booking-summary',
-                  arguments: {'trip': trip, 'seats': _seats},
+            const SizedBox(height: 20),
+            if (hasRouteCoordinates)
+              SizedBox(
+                height: 260,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: GoogleMap(
+                    initialCameraPosition: CameraPosition(
+                      target: mapTarget,
+                      zoom: hasDriverLocation ? 12 : 10,
+                    ),
+                    markers: {
+                      if (hasDriverLocation)
+                        Marker(
+                          markerId: const MarkerId('driver'),
+                          position: _driverCoordinate(trip),
+                          icon: BitmapDescriptor.defaultMarkerWithHue(
+                            BitmapDescriptor.hueAzure,
+                          ),
+                          infoWindow: const InfoWindow(title: 'Driver live location'),
+                        ),
+                      Marker(
+                        markerId: const MarkerId('origin'),
+                        position: _coordinate(trip.fromStop),
+                        infoWindow: const InfoWindow(title: 'Origin'),
+                      ),
+                      Marker(
+                        markerId: const MarkerId('destination'),
+                        position: _coordinate(trip.toStop),
+                        infoWindow: const InfoWindow(title: 'Destination'),
+                      ),
+                    },
+                    polylines: {
+                      Polyline(
+                        polylineId: const PolylineId('journey'),
+                        points: [
+                          _coordinate(trip.fromStop),
+                          _coordinate(trip.toStop),
+                        ],
+                        color: AppColors.primary,
+                        width: 4,
+                      ),
+                    },
+                    zoomControlsEnabled: false,
+                    myLocationButtonEnabled: false,
+                  ),
                 ),
-                icon: const Icon(Icons.event_seat_outlined),
-                label: const Text('Review booking'),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  'Driver location unavailable',
+                  style: AppTextStyles.body,
+                ),
+              ),
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Column(
+                children: [
+                  _LiveStatRow(
+                    label: 'Next stop',
+                    value: trip.nextStop?['display_name'] ?? trip.currentLocation?['display_name'] ?? 'Waiting',
+                  ),
+                  _LiveStatRow(
+                    label: 'ETA',
+                    value: trip.etaToPassengerStopMinutes != null
+                        ? '${trip.etaToPassengerStopMinutes} min'
+                        : trip.etaToNextStop != null
+                            ? '${trip.etaToNextStop} min'
+                            : 'Unavailable',
+                  ),
+                  _LiveStatRow(
+                    label: 'Distance',
+                    value: trip.distanceToPassengerStopKm != null
+                        ? '${trip.distanceToPassengerStopKm!.toStringAsFixed(1)} km'
+                        : 'Unavailable',
+                  ),
+                  _LiveStatRow(
+                    label: 'Speed',
+                    value: trip.driverSpeedKmh != null
+                        ? '${trip.driverSpeedKmh!.toStringAsFixed(1)} km/h'
+                        : 'Speed unavailable',
+                  ),
+                  _LiveStatRow(
+                    label: 'Last updated',
+                    value: trip.lastUpdatedAt != null
+                        ? _formatTime(trip.lastUpdatedAt)
+                        : 'Not available',
+                  ),
+                ],
               ),
             ),
+            const SizedBox(height: 20),
+            if (trip.driverPhone != null && trip.driverPhone!.trim().isNotEmpty) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () => _callDriver(trip.driverPhone!),
+                      icon: const Icon(Icons.phone_outlined),
+                      label: const Text('Call driver'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _messageDriver(trip.driverPhone!),
+                      icon: const Icon(Icons.message_outlined),
+                      label: const Text('Message'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+            ],
+            _DetailRow(label: 'Departure', value: trip.departureTime ?? 'Not provided'),
+            _DetailRow(label: 'Trip date', value: trip.tripDate ?? 'Not provided'),
+            _DetailRow(label: 'Status', value: trip.statusLabel),
+            _DetailRow(
+              label: 'Capacity',
+              value: '${trip.availableSeats} seats left / ${trip.totalCapacity}',
+            ),
+            _DetailRow(
+              label: 'Passengers',
+              value: '${trip.totalCapacity - trip.availableSeats} onboard',
+            ),
+            const SizedBox(height: 28),
+            if (showLiveNotice)
+              const _Notice(
+                key: ValueKey('booking-closed-notice'),
+                text: 'Booking is closed for this trip.',
+              ),
+            if (!showBooking && !showLiveNotice)
+              _Notice(
+                text: trip.availableSeats == 0
+                    ? 'This trip is sold out.'
+                    : 'This trip is no longer available for booking.',
+              ),
+            if (showBooking) ...[
+              Text('Choose seats', style: AppTextStyles.title),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    tooltip: 'Remove a seat',
+                    onPressed: _seats > 1 ? () => setState(() => _seats--) : null,
+                    icon: const Icon(Icons.remove_circle_outline),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Text(
+                      '$_seats',
+                      key: const ValueKey('seat-count'),
+                      style: AppTextStyles.heading,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Add a seat',
+                    onPressed: _seats < maxSeats
+                        ? () => setState(() => _seats++)
+                        : null,
+                    icon: const Icon(Icons.add_circle_outline),
+                  ),
+                ],
+              ),
+              Text(
+                'Select 1 to $maxSeats seat${maxSeats == 1 ? '' : 's'}',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.body.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () => Navigator.pushNamed(
+                    context,
+                    '/booking-summary',
+                    arguments: {'trip': trip, 'seats': _seats},
+                  ),
+                  icon: const Icon(Icons.event_seat_outlined),
+                  label: const Text('Review booking'),
+                ),
+              ),
+            ],
           ],
+        ),
+      ),
+    );
+  }
+
+  bool _hasCoordinates(Trip trip) {
+    return trip.fromStop?['latitude'] is num &&
+        trip.fromStop?['longitude'] is num &&
+        trip.toStop?['latitude'] is num &&
+        trip.toStop?['longitude'] is num;
+  }
+
+  bool _hasDriverCoordinates(Trip trip) {
+    return trip.driverLocation?['latitude'] is num &&
+        trip.driverLocation?['longitude'] is num;
+  }
+
+  LatLng _coordinate(Map<String, dynamic>? stop) {
+    return LatLng(
+      (stop?['latitude'] as num? ?? 0).toDouble(),
+      (stop?['longitude'] as num? ?? 0).toDouble(),
+    );
+  }
+
+  LatLng _driverCoordinate(Trip trip) {
+    return LatLng(
+      (trip.driverLocation?['latitude'] as num).toDouble(),
+      (trip.driverLocation?['longitude'] as num).toDouble(),
+    );
+  }
+
+  LatLng _midpointCoordinate(Trip trip) {
+    final from = _coordinate(trip.fromStop);
+    final to = _coordinate(trip.toStop);
+    return LatLng(
+      (from.latitude + to.latitude) / 2,
+      (from.longitude + to.longitude) / 2,
+    );
+  }
+
+  Future<void> _callDriver(String phoneNumber) async {
+    final uri = Uri(scheme: 'tel', path: phoneNumber.trim());
+    if (!await launchUrl(uri)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to open the phone dialer.')),
+      );
+    }
+  }
+
+  Future<void> _messageDriver(String phoneNumber) async {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Chat is available after your booking is confirmed.'),
+      ),
+    );
+  }
+
+  String _formatTime(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Not available';
+    }
+
+    final date = DateTime.tryParse(value);
+    if (date == null) return value;
+    final now = DateTime.now();
+    final difference = now.difference(date);
+    if (difference.inMinutes < 1) {
+      return 'just now';
+    }
+    if (difference.inMinutes < 60) {
+      return '${difference.inMinutes} min ago';
+    }
+    return '${difference.inHours} hr ago';
+  }
+}
+
+class _LiveStatRow extends StatelessWidget {
+  const _LiveStatRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(label, style: AppTextStyles.subtitle),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
+              textAlign: TextAlign.right,
+            ),
+          ),
         ],
       ),
     );
@@ -348,7 +712,7 @@ class _DetailRow extends StatelessWidget {
 }
 
 class _Notice extends StatelessWidget {
-  const _Notice({required this.text});
+  const _Notice({super.key, required this.text});
 
   final String text;
 

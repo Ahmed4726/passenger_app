@@ -160,7 +160,20 @@ class _TripSearchPageState extends State<TripSearchPage> {
         '/passenger-trips',
         queryParameters: {'from_stop_id': _fromStopId, 'to_stop_id': _toStopId},
       );
-      setState(() => _trips = response.data['data'] ?? []);
+      final rawTrips = response.data is Map ? response.data['data'] : null;
+      final seenTripIds = <String>{};
+      final uniqueTrips = <dynamic>[];
+      if (rawTrips is List) {
+        for (final trip in rawTrips) {
+          if (trip is! Map) continue;
+          final tripId = trip['id']?.toString();
+          if (tripId == null || seenTripIds.add(tripId)) {
+            uniqueTrips.add(trip);
+          }
+        }
+      }
+      if (!mounted) return;
+      setState(() => _trips = uniqueTrips);
     } catch (_) {
       setState(() => _trips = []);
     } finally {
@@ -437,6 +450,7 @@ class _TripSearchPageState extends State<TripSearchPage> {
                         );
                       },
                       child: Container(
+                        key: ValueKey('passenger-trip-${trip['id']}'),
                         width: double.infinity,
                         margin: const EdgeInsets.symmetric(vertical: 8),
                         padding: const EdgeInsets.all(18),
@@ -496,7 +510,9 @@ class _TripSearchPageState extends State<TripSearchPage> {
                                     borderRadius: BorderRadius.circular(16),
                                   ),
                                   child: Text(
-                                    'Live',
+                                    trip['status'] == 'started'
+                                        ? 'Live'
+                                        : 'Scheduled',
                                     style: AppTextStyles.body.copyWith(
                                       color: AppColors.primary,
                                       fontWeight: FontWeight.w700,

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/api/api_exception.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../chat/presentation/pages/chat_page.dart';
 import '../../data/booking.dart';
 import '../../data/booking_api.dart';
 
@@ -369,7 +370,7 @@ class _BookingDetailsPageState extends State<BookingDetailsPage> {
                     value: _booking.totalFare!.toStringAsFixed(2),
                   ),
                 const SizedBox(height: 28),
-                if (_booking.status == 'confirmed')
+                if (_booking.status == 'confirmed') ...[
                   FilledButton.icon(
                     onPressed: _cancelling ? null : _confirmCancellation,
                     icon: _cancelling
@@ -386,6 +387,20 @@ class _BookingDetailsPageState extends State<BookingDetailsPage> {
                       _cancelling ? 'Cancelling...' : 'Cancel booking',
                     ),
                   ),
+                  const SizedBox(height: 12),
+                ],
+                if ((_booking.trip?.driverPhone ?? '').trim().isNotEmpty) ...[
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ChatPage(booking: _booking),
+                      ),
+                    ),
+                    icon: const Icon(Icons.chat_bubble_outline_rounded),
+                    label: const Text('Message driver'),
+                  ),
+                ],
               ],
             ),
     );
